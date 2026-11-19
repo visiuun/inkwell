@@ -6,6 +6,7 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -64,13 +65,17 @@ fun UpdateCard(openPage: (String) -> Unit, modifier: Modifier = Modifier) {
                 }
             }
             Spacer(Modifier.height(16.dp))
-            UpdateAction(openPage)
+            UpdateAction(openPage, stacked = false)
         }
     }
 }
 
+/**
+ * The buttons, or the progress once they've been used. [stacked] puts the buttons under each
+ * other at full width, for places too narrow to hold them side by side.
+ */
 @Composable
-private fun UpdateAction(openPage: (String) -> Unit) {
+private fun UpdateAction(openPage: (String) -> Unit, stacked: Boolean) {
     val context = LocalContext.current
     val cs = MaterialTheme.colorScheme
     val haptics = LocalHaptics.current
@@ -88,23 +93,36 @@ private fun UpdateAction(openPage: (String) -> Unit) {
         }
         UpdateState.INSTALLING -> Text("Confirm the install in the system dialog.", style = MaterialTheme.typography.bodyMedium)
         else -> if (rel != null) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val update: @Composable (Modifier) -> Unit = { modifier ->
                 Button(
                     onClick = {
                         haptics.click()
                         Updater.install(context)
                     },
                     shapes = ButtonDefaults.shapes(),
-                    modifier = Modifier.weight(1f).height(52.dp),
+                    modifier = modifier.height(52.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = cs.primaryContainer, contentColor = cs.onPrimaryContainer),
-                ) { Text("Update now" + if (rel.apkSize > 0) " (${size(rel.apkSize)})" else "") }
+                ) { Text("Update now" + if (rel.apkSize > 0) " (${size(rel.apkSize)})" else "", maxLines = 1) }
+            }
+            val notes: @Composable (Modifier) -> Unit = { modifier ->
                 if (rel.page.isNotEmpty()) {
                     FilledTonalButton(
                         onClick = { openPage(rel.page) },
                         shapes = ButtonDefaults.shapes(),
-                        modifier = Modifier.height(52.dp),
+                        modifier = modifier.height(52.dp),
                         colors = ButtonDefaults.filledTonalButtonColors(containerColor = cs.surfaceContainerHighest, contentColor = cs.onSurface),
-                    ) { Text("What's new") }
+                    ) { Text("What's new", maxLines = 1) }
+                }
+            }
+            if (stacked) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    update(Modifier.fillMaxWidth())
+                    notes(Modifier.fillMaxWidth())
+                }
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(Modifier.weight(1f)) { update(Modifier.fillMaxWidth()) }
+                    notes(Modifier)
                 }
             }
         }
@@ -138,21 +156,21 @@ fun UpdateSection(autoUpdate: Boolean, setAutoUpdate: (Boolean) -> Unit, openPag
                     Text("Installed: Inkwell ${Updater.currentVersion}")
                     if (Updater.pending) {
                         Spacer(Modifier.height(12.dp))
-                        UpdateAction(openPage)
+                        UpdateAction(openPage, stacked = true)
                     } else if (state == UpdateState.ERROR && Updater.message.value.isNotEmpty()) {
                         Text(Updater.message.value, color = cs.error)
                     }
                 }
             },
-            trailingContent = {
-                when (state) {
-                    UpdateState.CHECKING -> LoadingIndicator(Modifier.size(36.dp))
-                    UpdateState.DOWNLOADING, UpdateState.INSTALLING -> {}
-                    else -> TextButton(onClick = {
+            trailingContent = when (state) {
+                UpdateState.CHECKING -> ({ LoadingIndicator(Modifier.size(36.dp)) })
+                UpdateState.AVAILABLE, UpdateState.DOWNLOADING, UpdateState.INSTALLING -> null
+                else -> ({
+                    TextButton(onClick = {
                         haptics.click()
                         Updater.check()
                     }) { Text("Check now") }
-                }
+                })
             },
             shapes = ListItemDefaults.segmentedShapes(index = 0, count = count),
             colors = colors,
