@@ -122,6 +122,9 @@ fun SettingsScreen(
                 SettingItem(Sym.Bolt, MaterialShapes.SoftBurst, "Wake NFC automatically",
                     "Android stops looking once it has seen the case. Opening the camera for a blink makes it look again. Nothing is recorded.",
                     checked = settings.nudge, onClick = { update { it.copy(nudge = !it.nudge) } }),
+                SettingItem(Sym.Contactless, MaterialShapes.Arch, "Keep Android quiet about the case",
+                    "Android treats the case as an empty tag and opens its \"New tag scanned\" screen whenever it notices it. Inkwell takes the tag instead and shows nothing.",
+                    checked = settings.quiet, onClick = { update { it.copy(quiet = !it.quiet) } }),
             ))
         }
 

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What the case looks like to Android: a Type 2 tag, with or without readable (empty) contents. -->
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <tech-list>
+        <tech>android.nfc.tech.NfcA</tech>
+        <tech>android.nfc.tech.Ndef</tech>
+    </tech-list>
+    <tech-list>
+        <tech>android.nfc.tech.NfcA</tech>
+    </tech-list>
+</resources>

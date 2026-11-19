@@ -31,7 +31,6 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         reader.listen(vm::onTag)
-        vm.resumed()
         Updater.init(this)
         Updater.checkIfDue(vm.settings.value.autoUpdate)
     }
@@ -39,7 +38,6 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         reader.stop()
-        vm.paused()
     }
 
     override fun onNewIntent(intent: Intent) {

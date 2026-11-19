@@ -29,6 +29,7 @@ import com.visiuun.inkwell.nfc.CaseInfo
 import com.visiuun.inkwell.nfc.CaseLink
 import com.visiuun.inkwell.nfc.CaseReader
 import com.visiuun.inkwell.nfc.CaseSession
+import com.visiuun.inkwell.nfc.CaseTags
 import com.visiuun.inkwell.nfc.RefreshResult
 import com.visiuun.inkwell.nfc.SimulatedCase
 import com.visiuun.inkwell.nfc.Stage
@@ -159,6 +160,8 @@ class InkwellViewModel(app: Application) : AndroidViewModel(app) {
         }
         reloadDesigns()
         refreshReport()
+        // Tags Android hands to the background sink reach a waiting job through here.
+        CaseTags.listener = ::onTag
     }
 
     private fun setSource(bitmap: Bitmap?) {
@@ -215,7 +218,10 @@ class InkwellViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun updateSettings(transform: (Settings) -> Settings) {
+        val before = prefs.settings.value
         prefs.update(transform)
+        val after = prefs.settings.value
+        if (before.quiet != after.quiet) runCatching { CaseTags.setQuiet(getApplication(), after.quiet) }
         refreshReport()
     }
 
@@ -252,12 +258,11 @@ class InkwellViewModel(app: Application) : AndroidViewModel(app) {
     private var lastJob: CaseJob? = null
     @Volatile private var cancel = false
     @Volatile private var tech: NfcA? = null
+    @Volatile private var tagInUse: Tag? = null
     private var waitLoop: Job? = null
 
     /** The case's tag handle from its last announcement. Reused for the next job while it stays valid. */
     @Volatile private var held: Tag? = null
-    /** The handle Android was told to stop announcing when the app went to the background. */
-    private var parked: Tag? = null
 
     private fun refreshReport() {
         val c = prefs.case.value
@@ -314,8 +319,6 @@ class InkwellViewModel(app: Application) : AndroidViewModel(app) {
             nfc == null -> fail("No NFC here", "This phone has no NFC, so it can't reach the case.")
             !nfc.isEnabled -> fail("NFC is off", "Turn NFC on, then send again.", nfcOff = true)
             else -> {
-                // Let Android announce the case again if it was told to stay quiet about it.
-                release()
                 val tag = held
                 if (tag != null && busy.compareAndSet(false, true)) {
                     // The case is still on the line from last time: no need to wait for it.
@@ -331,30 +334,6 @@ class InkwellViewModel(app: Application) : AndroidViewModel(app) {
                     beginWaiting()
                 }
             }
-        }
-    }
-
-    private fun release() {
-        val tag = parked ?: return
-        parked = null
-        runCatching { nfc?.ignore(tag, 0, null, null) }
-    }
-
-    /** The app is in front: reader mode is on and Android may announce the case again. */
-    fun resumed() = release()
-
-    /**
-     * The app left the foreground. With reader mode gone Android would pop up its own
-     * "New tag scanned" screen for the case, so ask it to stay quiet until the case has been
-     * out of range for a few seconds.
-     */
-    fun paused() {
-        if (_transfer.value.active) return
-        val tag = held ?: return
-        val accepted = runCatching { nfc?.ignore(tag, IGNORE_MS, null, null) }.getOrNull() == true
-        if (accepted) {
-            parked = tag
-            held = null
         }
     }
 
@@ -425,6 +404,7 @@ class InkwellViewModel(app: Application) : AndroidViewModel(app) {
                     return backToWaiting()
                 }
                 tech = nfcA
+                tagInUse = tag
                 // The case's microcontroller boots from the reader's field.
                 Thread.sleep(500)
                 val link = CaseLink { frame ->
@@ -459,6 +439,8 @@ class InkwellViewModel(app: Application) : AndroidViewModel(app) {
         val session = CaseSession(link, cancelled = { cancel })
         session.login()
         var info = session.handshake()
+        // This tag is the case: from now on only it is kept away from Android's tag screen.
+        tagInUse?.let { CaseTags.remember(getApplication(), it) }
         when (current) {
             CaseJob.Read -> {
                 val serial = try { session.readSerial() } catch (_: CaseException) { null }
@@ -554,12 +536,8 @@ class InkwellViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private companion object {
-        /** How long the case must be out of range before Android announces it again. */
-        const val IGNORE_MS = 3000
-    }
-
     override fun onCleared() {
+        CaseTags.listener = null
         cancel = true
         executor.shutdownNow()
     }

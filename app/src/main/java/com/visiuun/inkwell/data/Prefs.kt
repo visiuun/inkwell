@@ -27,6 +27,8 @@ data class Settings(
     /** Look for a newer release on GitHub once a day. */
     val autoUpdate: Boolean = true,
     val haptics: Boolean = true,
+    /** Take the case's tag off Android's hands so its "New tag scanned" screen stays away. */
+    val quiet: Boolean = true,
 )
 
 /** The panel the editor targets until a case says otherwise: the common 3.7" four-colour one. */
@@ -56,6 +58,7 @@ class Prefs(context: Context) {
         scan = sp.getString("scan", null)?.let { v -> Scan.entries.firstOrNull { it.name == v } } ?: Scan.ROWS,
         autoUpdate = sp.getBoolean("auto_update", true),
         haptics = sp.getBoolean("haptics", true),
+        quiet = sp.getBoolean("quiet", true),
     )
 
     fun update(transform: (Settings) -> Settings) {
@@ -71,6 +74,7 @@ class Prefs(context: Context) {
             putString("scan", s.scan.name)
             putBoolean("auto_update", s.autoUpdate)
             putBoolean("haptics", s.haptics)
+            putBoolean("quiet", s.quiet)
         }
     }
 
