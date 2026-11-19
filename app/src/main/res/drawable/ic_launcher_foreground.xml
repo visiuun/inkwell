@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One drop holding the panel's inks: paper white on top, then yellow, then red, on black. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <group android:pivotX="54" android:pivotY="54" android:scaleX="0.94" android:scaleY="0.94">
+        <clip-path android:pathData="M54,19C54,19 31,43 31,61a23,23 0,0 0,46 0C77,43 54,19 54,19z" />
+        <path android:fillColor="#FFF3F0E6" android:pathData="M28,16h52v72h-52z" />
+        <path android:fillColor="#FFFFD426" android:pathData="M28,52C36,47 45,57 54,52C63,47 72,57 80,52L80,88L28,88z" />
+        <path android:fillColor="#FFE5392B" android:pathData="M28,66C36,61 45,71 54,66C63,61 72,71 80,66L80,88L28,88z" />
+    </group>
+</vector>

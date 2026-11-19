@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Themed icon: the same drop, its three layers separated by thin gaps. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <group android:pivotX="54" android:pivotY="54" android:scaleX="0.94" android:scaleY="0.94">
+        <clip-path android:pathData="M54,19C54,19 31,43 31,61a23,23 0,0 0,46 0C77,43 54,19 54,19z" />
+        <path android:fillColor="#FF000000" android:pathData="M28,16H80V50.5C72,55.5 63,45.5 54,50.5C45,55.5 36,45.5 28,50.5z" />
+        <path android:fillColor="#FF000000" android:pathData="M28,53.5C36,48.5 45,58.5 54,53.5C63,48.5 72,58.5 80,53.5V64.5C72,69.5 63,59.5 54,64.5C45,69.5 36,59.5 28,64.5z" />
+        <path android:fillColor="#FF000000" android:pathData="M28,67.5C36,62.5 45,72.5 54,67.5C63,62.5 72,72.5 80,67.5V88H28z" />
+    </group>
+</vector>

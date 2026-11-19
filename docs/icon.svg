@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="18 18 72 72">
+  <!-- Same artwork as the app's adaptive icon (res/drawable/ic_launcher_*.xml), cropped to the visible 72dp area. -->
+  <defs>
+    <radialGradient id="bg" cx="54" cy="50" r="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#26231F"/><stop offset="1" stop-color="#0B0A09"/>
+    </radialGradient>
+    <clipPath id="round"><circle cx="54" cy="54" r="36"/></clipPath>
+    <clipPath id="drop"><path d="M54,19C54,19 31,43 31,61a23,23 0 0 0 46,0C77,43 54,19 54,19z"/></clipPath>
+  </defs>
+  <g clip-path="url(#round)">
+    <rect x="18" y="18" width="72" height="72" fill="url(#bg)"/>
+    <g transform="translate(54 54) scale(0.94) translate(-54 -54)">
+      <g clip-path="url(#drop)">
+        <rect x="28" y="16" width="52" height="72" fill="#F3F0E6"/>
+        <path d="M28,52C36,47 45,57 54,52C63,47 72,57 80,52L80,88L28,88z" fill="#FFD426"/>
+        <path d="M28,66C36,61 45,71 54,66C63,61 72,71 80,66L80,88L28,88z" fill="#E5392B"/>
+      </g>
+    </g>
+  </g>
+</svg>
