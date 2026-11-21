@@ -49,7 +49,7 @@ The cases in question have a battery-free e-ink panel on the back that shows bla
 - **Share to it.** "Put on my case" shows up in Android's share sheet for images.
 - **Wipe to white**, read the case's details, and a test card for checking the panel.
 - **Haptics** as the picture goes across and when it lands.
-- **Keeps Android quiet.** Android sees the case as an empty NFC tag and keeps opening its own "New tag scanned" screen for it. Inkwell takes the tag instead and shows nothing.
+- **Keeps Android quiet.** Android sees the case as an empty NFC tag and keeps opening its own "New tag scanned" screen for it. Inkwell takes the tag instead and shows nothing. If another app on the phone (usually the system's own "Tags") claims the case too, Settings points to it so it can be switched off.
 - **Updates itself** from this repository's releases. That is the only thing it goes online for.
 - Light, dark and true-black OLED themes.
 

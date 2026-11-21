@@ -2,6 +2,9 @@ package com.visiuun.inkwell.nfc
 
 import android.Manifest
 import android.app.Activity
+import android.app.PendingIntent
+import android.content.Intent
+import android.os.Build
 import android.content.Context
 import android.content.pm.PackageManager
 import android.hardware.camera2.CameraCharacteristics
@@ -26,6 +29,7 @@ class CaseReader(private val activity: Activity) {
     private val adapter: NfcAdapter? = NfcAdapter.getDefaultAdapter(activity)
     private val handler = Handler(Looper.getMainLooper())
     private var listening = false
+    private var dispatching = false
 
     val supported: Boolean get() = adapter != null
     val enabled: Boolean get() = adapter?.isEnabled == true
@@ -44,9 +48,27 @@ class CaseReader(private val activity: Activity) {
             listening = true
         } catch (_: Exception) {
         }
+        // Reader mode alone is not enough on every phone: after NFC restarts its scan (which is
+        // what the camera nudge provokes) some hand the tag to the normal app chooser instead of
+        // to the reader. Foreground dispatch outranks that chooser, so with both in place nothing
+        // of Android's can pop up over Inkwell. The tag then arrives as an intent.
+        try {
+            val intent = Intent(activity, activity.javaClass).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            val flags2 = PendingIntent.FLAG_UPDATE_CURRENT or if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0
+            a.enableForegroundDispatch(activity, PendingIntent.getActivity(activity, 0, intent, flags2), null, null)
+            dispatching = true
+        } catch (_: Exception) {
+        }
     }
 
     fun stop() {
+        if (dispatching) {
+            dispatching = false
+            try {
+                adapter?.disableForegroundDispatch(activity)
+            } catch (_: Exception) {
+            }
+        }
         if (!listening) return
         listening = false
         try {

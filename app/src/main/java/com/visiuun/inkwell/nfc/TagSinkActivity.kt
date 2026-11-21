@@ -9,6 +9,7 @@ import android.nfc.NfcAdapter
 import android.nfc.Tag
 import android.os.Build
 import android.os.Bundle
+import org.xmlpull.v1.XmlPullParser
 
 /**
  * Where Android sends the case's tag when Inkwell is not on screen.
@@ -69,14 +70,67 @@ object CaseTags {
 
     private const val PREFS = "inkwell"
     private const val KEY_UID = "case_uid"
+    private const val KEY_TECHS = "case_techs"
     /** First byte of every serial number Fudan Microelectronics hands out. */
     private const val FUDAN = 0x1D.toByte()
 
     private fun hex(id: ByteArray) = id.joinToString("") { "%02X".format(it) }
 
-    /** Remembers the serial of a tag that turned out to be the case. */
+    /** Remembers the serial of a tag that turned out to be the case, and what kinds of tag it claims to be. */
     fun remember(context: Context, tag: Tag) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_UID, hex(tag.id)).apply()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString(KEY_UID, hex(tag.id))
+            .putString(KEY_TECHS, tag.techList.joinToString(","))
+            .apply()
+    }
+
+    class Rival(val packageName: String, val label: String)
+
+    /**
+     * Apps other than Inkwell that have told Android they handle tags like the case.
+     *
+     * When Inkwell is not on screen Android offers the case's tag to every such app. With one
+     * taker it goes there silently; with more than one Android asks, every single time, and has
+     * no "always" to tick. On most phones the only other taker is the system's own "Tags" app,
+     * and the question stops for good once that is switched off.
+     */
+    fun rivals(context: Context): List<Rival> = try {
+        val pm = context.packageManager
+        val saved = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_TECHS, null)
+        val techs = saved?.split(",")?.filter { it.isNotEmpty() }?.toSet()
+            ?: setOf("android.nfc.tech.NfcA", "android.nfc.tech.Ndef", "android.nfc.tech.MifareUltralight")
+        pm.queryIntentActivities(Intent(NfcAdapter.ACTION_TECH_DISCOVERED), PackageManager.GET_META_DATA)
+            .filter { it.activityInfo.packageName != context.packageName && it.activityInfo.enabled && it.activityInfo.applicationInfo.enabled }
+            .filter { info ->
+                // The app is offered the tag if one of its lists names only kinds the tag has.
+                val xml = info.activityInfo.loadXmlMetaData(pm, NfcAdapter.ACTION_TECH_DISCOVERED) ?: return@filter false
+                var match = false
+                var list: MutableList<String>? = null
+                try {
+                    var event = xml.eventType
+                    while (event != XmlPullParser.END_DOCUMENT && !match) {
+                        when (event) {
+                            XmlPullParser.START_TAG -> when (xml.name) {
+                                "tech-list" -> list = mutableListOf()
+                                "tech" -> list?.add(xml.nextText().trim())
+                            }
+                            XmlPullParser.END_TAG -> if (xml.name == "tech-list") {
+                                val wants = list
+                                if (wants != null && wants.isNotEmpty() && techs.containsAll(wants)) match = true
+                                list = null
+                            }
+                        }
+                        event = xml.next()
+                    }
+                } finally {
+                    xml.close()
+                }
+                match
+            }
+            .distinctBy { it.activityInfo.packageName }
+            .map { Rival(it.activityInfo.packageName, it.activityInfo.applicationInfo.loadLabel(pm).toString()) }
+    } catch (_: Exception) {
+        emptyList()
     }
 
     /** The case this phone has talked to, or, before the first contact, anything with the case's kind of chip. */

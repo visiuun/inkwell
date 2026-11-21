@@ -319,6 +319,14 @@ class InkwellViewModel(app: Application) : AndroidViewModel(app) {
 
     fun readCase() = start(CaseJob.Read)
 
+    /** Other apps Android would also offer the case's tag to. See [CaseTags.rivals]. */
+    private val _rivals = MutableStateFlow(CaseTags.rivals(app))
+    val rivals: StateFlow<List<CaseTags.Rival>> = _rivals.asStateFlow()
+
+    fun refreshRivals() {
+        _rivals.value = CaseTags.rivals(getApplication())
+    }
+
     fun retry() {
         lastJob?.let { start(it) }
     }
@@ -416,9 +424,11 @@ class InkwellViewModel(app: Application) : AndroidViewModel(app) {
                     nfcA.connect()
                     nfcA.timeout = 3000
                 } catch (e: Exception) {
-                    // The handle went stale: the case has to be announced again.
+                    // The handle went stale. If the case has been announced again in the
+                    // meantime, carry on with that; otherwise wait for it.
                     if (held === tag) held = null
-                    return backToWaiting()
+                    val fresher = held
+                    return if (fresher != null && fresher !== tag) talk(fresher, current) else backToWaiting()
                 }
                 tech = nfcA
                 tagInUse = tag
@@ -458,6 +468,7 @@ class InkwellViewModel(app: Application) : AndroidViewModel(app) {
         var info = session.handshake()
         // This tag is the case: from now on only it is kept away from Android's tag screen.
         tagInUse?.let { CaseTags.remember(getApplication(), it) }
+        _rivals.value = CaseTags.rivals(getApplication())
         when (current) {
             CaseJob.Read -> {
                 val serial = try { session.readSerial() } catch (_: CaseException) { null }

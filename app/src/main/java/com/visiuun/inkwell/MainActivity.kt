@@ -2,6 +2,8 @@ package com.visiuun.inkwell
 
 import android.content.Intent
 import android.net.Uri
+import android.nfc.NfcAdapter
+import android.nfc.Tag
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -31,6 +33,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         reader.listen(vm::onTag)
+        vm.refreshRivals()
         Updater.init(this)
         Updater.checkIfDue(vm.settings.value.autoUpdate)
     }
@@ -48,6 +51,17 @@ class MainActivity : ComponentActivity() {
     /** A picture shared to Inkwell or opened with it goes straight into the editor. */
     private fun handle(intent: Intent?) {
         intent ?: return
+        // The case, handed over by foreground dispatch (see CaseReader.listen).
+        val tag: Tag? = if (Build.VERSION.SDK_INT >= 33) {
+            intent.getParcelableExtra(NfcAdapter.EXTRA_TAG, Tag::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(NfcAdapter.EXTRA_TAG)
+        }
+        if (tag != null) {
+            vm.onTag(tag)
+            return
+        }
         if (intent.action == Updater.ACTION_SHOW) {
             // Tapped the "update available" notification.
             vm.showTab(Tab.SETTINGS)

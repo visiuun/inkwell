@@ -1,5 +1,7 @@
 package com.visiuun.inkwell.ui
 
+import android.content.Intent
+import android.net.Uri
 import android.content.ClipData
 import android.content.ClipboardManager
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -118,14 +121,31 @@ fun SettingsScreen(
 
         item { SectionHeader("Connection", Modifier.widthIn(max = 640.dp)) }
         item {
-            Group(listOf(
-                SettingItem(Sym.Bolt, MaterialShapes.SoftBurst, "Wake NFC automatically",
+            // Refreshed whenever Inkwell comes back to the front, e.g. from the system's app settings.
+            val rivals = vm.rivals.collectAsState().value
+            val context = LocalContext.current
+            Group(buildList {
+                add(SettingItem(Sym.Bolt, MaterialShapes.SoftBurst, "Wake NFC automatically",
                     "Android stops looking once it has seen the case. Opening the camera for a blink makes it look again. Nothing is recorded.",
-                    checked = settings.nudge, onClick = { update { it.copy(nudge = !it.nudge) } }),
-                SettingItem(Sym.Contactless, MaterialShapes.Arch, "Keep Android quiet about the case",
+                    checked = settings.nudge, onClick = { update { it.copy(nudge = !it.nudge) } }))
+                add(SettingItem(Sym.Contactless, MaterialShapes.Arch, "Keep Android quiet about the case",
                     "Android treats the case as an empty tag and opens its \"New tag scanned\" screen whenever it notices it. Inkwell takes the tag instead and shows nothing.",
-                    checked = settings.quiet, onClick = { update { it.copy(quiet = !it.quiet) } }),
-            ))
+                    checked = settings.quiet, onClick = { update { it.copy(quiet = !it.quiet) } }))
+                for (rival in rivals) {
+                    add(SettingItem(Sym.Warning, MaterialShapes.Pentagon, "Stop the \"Choose an action\" question",
+                        "\"${rival.label}\" also wants the case's tag, so when Inkwell is closed Android asks which app to use, every time. " +
+                            "Tap here, then choose Disable (or Force stop and Disable). After that the case stays silent.",
+                        accent = true,
+                        onClick = {
+                            runCatching {
+                                context.startActivity(
+                                    Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${rival.packageName}"))
+                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                                )
+                            }
+                        }))
+                }
+            })
         }
 
         item { SectionHeader("Library", Modifier.widthIn(max = 640.dp)) }
