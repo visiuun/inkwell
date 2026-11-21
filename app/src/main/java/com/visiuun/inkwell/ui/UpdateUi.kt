@@ -157,14 +157,25 @@ fun UpdateSection(autoUpdate: Boolean, setAutoUpdate: (Boolean) -> Unit, openPag
                     if (Updater.pending) {
                         Spacer(Modifier.height(12.dp))
                         UpdateAction(openPage, stacked = true)
-                    } else if (state == UpdateState.ERROR && Updater.message.value.isNotEmpty()) {
-                        Text(Updater.message.value, color = cs.error)
+                    } else if (state == UpdateState.ERROR) {
+                        if (Updater.message.value.isNotEmpty()) Text(Updater.message.value, color = cs.error)
+                        Spacer(Modifier.height(12.dp))
+                        FilledTonalButton(
+                            onClick = {
+                                haptics.click()
+                                Updater.check()
+                            },
+                            shapes = ButtonDefaults.shapes(),
+                            modifier = Modifier.fillMaxWidth().height(52.dp),
+                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = cs.surfaceContainerHighest, contentColor = cs.onSurface),
+                        ) { Text("Try again", maxLines = 1) }
                     }
                 }
             },
             trailingContent = when (state) {
                 UpdateState.CHECKING -> ({ LoadingIndicator(Modifier.size(36.dp)) })
-                UpdateState.AVAILABLE, UpdateState.DOWNLOADING, UpdateState.INSTALLING -> null
+                // These states bring buttons of their own, which need the row's whole width.
+                UpdateState.AVAILABLE, UpdateState.DOWNLOADING, UpdateState.INSTALLING, UpdateState.ERROR -> null
                 else -> ({
                     TextButton(onClick = {
                         haptics.click()

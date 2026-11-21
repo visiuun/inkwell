@@ -1,5 +1,9 @@
 package com.visiuun.inkwell.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
 import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Intent
@@ -163,6 +167,16 @@ fun InkwellApp(vm: InkwellViewModel, reader: CaseReader) {
                         Tab.SETTINGS -> SettingsScreen(settings, case, designs.size, report, vm, openPage, contentPadding)
                     }
                 }
+
+                // Lists scroll up underneath the status bar; without this their text would show
+                // through the clock.
+                val surface = MaterialTheme.colorScheme.surface
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(bars.calculateTopPadding() + 12.dp)
+                        .background(Brush.verticalGradient(0f to surface, 0.75f to surface, 1f to surface.copy(alpha = 0f))),
+                )
 
                 Row(
                     Modifier

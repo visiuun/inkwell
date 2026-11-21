@@ -39,6 +39,7 @@ enum class UpdateState { IDLE, CHECKING, UP_TO_DATE, AVAILABLE, DOWNLOADING, INS
 object Updater {
     const val REPO_URL = "https://github.com/${BuildConfig.UPDATE_REPO}"
     private const val API = "https://api.github.com/repos/${BuildConfig.UPDATE_REPO}/releases/latest"
+    private const val LATEST = "https://github.com/${BuildConfig.UPDATE_REPO}/releases/latest"
     private const val ASSET = "Inkwell.apk"
     private const val CHECK_INTERVAL = 24 * 60 * 60 * 1000L
     private const val CHANNEL = "updates"
@@ -90,13 +91,64 @@ object Updater {
                     state.value = UpdateState.UP_TO_DATE
                 }
             }.onFailure {
-                message.value = "Couldn't reach GitHub (${it.message ?: it.javaClass.simpleName})"
+                message.value = when (it) {
+                    is java.net.UnknownHostException -> "No connection to GitHub. Check that the phone is online, then try again."
+                    is java.net.SocketTimeoutException -> "GitHub took too long to answer. Try again in a moment."
+                    else -> "Couldn't reach GitHub. Try again in a moment."
+                }
                 state.value = UpdateState.ERROR
             }
         }
     }
 
-    private fun fetchLatest(): Release? {
+    /**
+     * The newest release. GitHub's API is asked first because it knows the notes and the size of
+     * the download. If the API can't be reached (some networks and ad blockers refuse its
+     * address, and it limits how often it may be asked) the website itself is asked instead:
+     * its "latest release" address forwards to the newest version, which is all that is needed.
+     */
+    private fun fetchLatest(): Release? = try {
+        fetchFromApi()
+    } catch (first: Exception) {
+        try {
+            fetchFromSite()
+        } catch (_: Exception) {
+            throw first
+        }
+    }
+
+    private fun fetchFromSite(): Release? {
+        val conn = (URL(LATEST).openConnection() as HttpURLConnection).apply {
+            instanceFollowRedirects = false
+            connectTimeout = 15_000
+            readTimeout = 15_000
+            requestMethod = "HEAD"
+            setRequestProperty("User-Agent", "Inkwell/$currentVersion")
+        }
+        try {
+            val code = conn.responseCode
+            if (code == 404) return null
+            if (code !in 300..399) error("HTTP $code")
+            return releaseAt(conn.getHeaderField("Location") ?: error("no location"))
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    /** The release a ".../releases/tag/v1.2.3" address stands for, or null if it is not one. */
+    internal fun releaseAt(location: String): Release? {
+        val tag = location.substringAfter("/releases/tag/", "").substringBefore('?').substringBefore('#').trim('/')
+        if (tag.isEmpty() || !tag.removePrefix("v").first().isDigit()) return null
+        return Release(
+            version = tag.removePrefix("v"),
+            notes = "",
+            apkUrl = "$REPO_URL/releases/download/$tag/$ASSET",
+            apkSize = 0L,
+            page = "$REPO_URL/releases/tag/$tag",
+        )
+    }
+
+    private fun fetchFromApi(): Release? {
         val conn = (URL(API).openConnection() as HttpURLConnection).apply {
             connectTimeout = 15_000
             readTimeout = 15_000

@@ -256,4 +256,13 @@ class ProtocolTest {
         val whites = grey.count { it == Ink.WHITE.code.toByte() }
         assertTrue("white share was $whites of ${grey.size}", whites in grey.size * 4 / 10..grey.size * 6 / 10)
     }
+
+    @Test
+    fun theWebsiteCanStandInForTheApiWhenLookingForUpdates() {
+        val rel = com.visiuun.inkwell.update.Updater.releaseAt("https://github.com/visiuun/inkwell/releases/tag/v1.4.0")!!
+        assertEquals("1.4.0", rel.version)
+        assertEquals("https://github.com/visiuun/inkwell/releases/download/v1.4.0/Inkwell.apk", rel.apkUrl)
+        // No releases yet: the address forwards to the list instead of to a tag.
+        assertEquals(null, com.visiuun.inkwell.update.Updater.releaseAt("https://github.com/visiuun/inkwell/releases"))
+    }
 }
