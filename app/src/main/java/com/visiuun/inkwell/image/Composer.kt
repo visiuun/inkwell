@@ -27,8 +27,8 @@ data class Placement(
 /** How the photo is translated to ink. Sliders run from -1 to 1 with 0 meaning untouched. */
 data class Look(
     val brightness: Float = 0f,
-    val contrast: Float = 0.15f,
-    val saturation: Float = 0.3f,
+    val contrast: Float = DEFAULT_CONTRAST,
+    val saturation: Float = DEFAULT_SATURATION,
     val dither: Dither = Dither.SMOOTH,
     val red: Boolean = true,
     val yellow: Boolean = true,
@@ -40,11 +40,15 @@ data class Look(
             if (yellow) add(Ink.YELLOW)
             if (red) add(Ink.RED)
         }
+
+    companion object {
+        const val DEFAULT_CONTRAST = 0.15f
+        const val DEFAULT_SATURATION = 0.3f
+    }
 }
 
 object Composer {
     private const val SOURCE_MAX = 1400
-    private const val SUPERSAMPLE = 2
 
     /** Decodes a picked photo at a size that is comfortable to re-render on every gesture. */
     fun load(resolver: ContentResolver, uri: Uri): Bitmap? = try {
@@ -102,11 +106,12 @@ object Composer {
     ): InkImage {
         val backdrop = if (look.darkBackdrop) Ink.BLACK else Ink.WHITE
         if (source == null) return InkImage.solid(width, height, backdrop)
-        val k = SUPERSAMPLE
+        val fit = baseScale(source, width, height, placement) * placement.zoom
+        val k = Raster.oversample(fit)
         val canvasBitmap = Bitmap.createBitmap(width * k, height * k, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(canvasBitmap)
         canvas.drawColor(0xFF000000.toInt() or backdrop.rgb)
-        val scale = baseScale(source, width, height, placement) * placement.zoom * k
+        val scale = fit * k
         val matrix = Matrix().apply {
             postTranslate(-source.width / 2f, -source.height / 2f)
             postRotate(90f * placement.quarterTurns)
@@ -118,40 +123,8 @@ object Composer {
         canvasBitmap.getPixels(raw, 0, width * k, 0, 0, width * k, height * k)
         canvasBitmap.recycle()
 
-        val rgb = FloatArray(width * height * 3)
-        val contrast = if (look.contrast >= 0f) 1f + look.contrast * 1.5f else 1f + look.contrast * 0.8f
-        val saturation = if (look.saturation >= 0f) 1f + look.saturation * 1.5f else 1f + look.saturation
-        val lift = look.brightness * 110f
-        val samples = (k * k).toFloat()
-        var lumaSum = 0.0
-        for (y in 0 until height) {
-            for (x in 0 until width) {
-                var r = 0f
-                var g = 0f
-                var b = 0f
-                for (dy in 0 until k) {
-                    val row = (y * k + dy) * width * k
-                    for (dx in 0 until k) {
-                        val c = raw[row + x * k + dx]
-                        r += (c shr 16) and 0xFF
-                        g += (c shr 8) and 0xFF
-                        b += c and 0xFF
-                    }
-                }
-                r /= samples; g /= samples; b /= samples
-                val luma = 0.299f * r + 0.587f * g + 0.114f * b
-                lumaSum += luma
-                r = luma + (r - luma) * saturation
-                g = luma + (g - luma) * saturation
-                b = luma + (b - luma) * saturation
-                val i = (y * width + x) * 3
-                rgb[i] = ((r - 128f) * contrast + 128f + lift).coerceIn(0f, 255f)
-                rgb[i + 1] = ((g - 128f) * contrast + 128f + lift).coerceIn(0f, 255f)
-                rgb[i + 2] = ((b - 128f) * contrast + 128f + lift).coerceIn(0f, 255f)
-            }
-        }
-        val meanLuma = (lumaSum / (width * height) / 255.0).toFloat()
-        return Quantizer.quantize(rgb, width, height, look.inks, look.dither, meanLuma, refine, keepGoing)
+        val reduced = Raster.reduce(raw, width, height, k, look)
+        return Quantizer.quantize(reduced.rgb, width, height, look.inks, look.dither, reduced.meanLuma, refine, keepGoing)
     }
 
     fun toBitmap(image: InkImage, paper: Boolean): Bitmap =

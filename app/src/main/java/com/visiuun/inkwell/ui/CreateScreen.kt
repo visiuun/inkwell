@@ -111,8 +111,9 @@ fun CreateScreen(editor: Editor, vm: InkwellViewModel, pick: () -> Unit, openPag
                     Dither.CRISP -> "Lighter and punchier, keeps edges sharp."
                     Dither.PATTERN -> "A regular halftone grid with a print feel."
                     Dither.FLAT -> "Solid areas only. Made for logos, text and line art."
-                    Dither.SMART -> "Reads the picture and places every pixel to follow its shapes: clean flat areas, " +
-                        "sharp lines, truer colour, and dark pictures lifted. Settles a moment after you let go."
+                    Dither.SMART -> "Works the picture out against the panel's real pigments and places every pixel " +
+                        "to follow its shapes: the truest colour the case can show, sharp lines, even flat areas. " +
+                        "Settles a moment after you let go."
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

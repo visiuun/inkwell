@@ -11,33 +11,43 @@ import kotlin.math.sqrt
 
 /**
  * The Smart texture. Where the other textures push rounding errors along and hope, this one
- * decides where every pixel goes by judging the picture as a whole:
+ * works out the picture against the panel itself (see [Panel]) and decides where every pixel goes:
  *
- *  1. Tone. Dark pictures are lifted (a reflective panel swallows them), colours are moved to
- *     the space in which ink dots actually mix, and colours the inks cannot make (blue, green,
- *     purple) are replaced by the nearest one they can, keeping its brightness.
- *  2. Clean-up. Every colour is pulled a little towards the ink it mostly consists of, and ink
- *     that would only show up as a few stray dots is dropped.
+ *  1. Tone. The picture is sharpened a touch, brightened a touch (dot patterns read darker than
+ *     the light they reflect) and, if it is dark overall, lifted, by brightness alone so strong
+ *     colours stay strong.
+ *  2. Colour. Every pixel gets the mix of the panel's real pigments that comes closest to it,
+ *     giving up a little accuracy where that buys a quieter pattern. Colours the pigments cannot
+ *     make (blue, green, purple) land on the nearest one they can. Ink that would only show up as
+ *     a few stray dots is dropped.
  *  3. Placement. Starting from an ordinary diffusion, pixels are changed and swapped for as long
- *     as that brings the picture, as the eye blurs it, closer to the original. Brightness is
- *     judged through a narrow blur and colour through a wide one, so lines and edges are drawn
- *     with the pixels that sit exactly on them while flat areas settle into an even weave.
+ *     as that brings the picture, as the eye blurs it, closer to the mixes worked out above.
+ *     Brightness is judged through a narrow blur and colour through a wide one, so lines and
+ *     edges are drawn with the pixels that sit exactly on them while flat areas settle into an
+ *     even weave.
  *
- * The numbers below were tuned on test pictures against four scores: colour error, structural
- * similarity, agreement of edges, and grain in areas the original has flat.
+ * The numbers below were tuned on test pictures in a simulation of the panel, against five
+ * scores: colour error, lightness error, structural similarity, agreement of edges, and grain in
+ * areas the original has flat.
  */
 internal object Smart {
-    /** Exponent from 0..1 sRGB to the space ink dots are mixed in. 2.2 would be physical light;
-     *  pixels this large are partly seen one by one, which calls for a little less. */
-    private const val MIX_GAMMA = 1.7
-    private const val EXPOSE_TARGET = 0.42
-    private const val EXPOSE_MIN = 0.65
+    /** Brightness exponent applied to every picture; below 1 brightens. */
+    private const val BRIGHTEN = 0.87
+
+    /** Pictures darker on average than this are lifted towards it... */
+    private const val EXPOSE_TARGET = 0.4
+
+    /** ...by a further exponent no smaller than this, and no pixel by more than [EXPOSE_CAP] times. */
+    private const val EXPOSE_MIN = 0.8
+    private const val EXPOSE_CAP = 3.0
+
     private const val SHARPEN = 0.6f
-    private const val SNAP = 1.25
+
+    /** Shares of ink below about twice this are faded out: they would only be stray dots. */
     private const val CLEAN = 0.03f
     private const val SIGMA_LIGHT = 1.0
     private const val SIGMA_COLOUR = 1.6
-    private const val COLOUR_WEIGHT = 0.6f
+    private const val COLOUR_WEIGHT = 0.4f
     private const val GAIN_FLOOR = 0.04
     private const val GAIN_POWER = 2.0 / 3.0
     private const val PASSES = 8
@@ -47,27 +57,11 @@ internal object Smart {
 
     private const val LUT = 2048
 
-    // How bright each channel counts, for replacing colours the inks cannot make.
-    private const val WR = 0.2126f
-    private const val WG = 0.7152f
-    private const val WB = 0.0722f
-
-    /**
-     * Roughly how the pigments look next to the panel's own white, in linear light, indexed by
-     * ink code. Only used to judge how visible a pattern is; tone comes from the ideal inks.
-     */
-    private val SEEN = arrayOf(
-        floatArrayOf(0f, 0f, 0f),
-        floatArrayOf(1f, 1f, 1f),
-        floatArrayOf(1f, 0.80f, 0.05f),
-        floatArrayOf(0.58f, 0.04f, 0.03f),
-    )
-
     /** Brightness, red against green, yellow against blue. */
-    private fun opponent(c: FloatArray) = floatArrayOf(
-        0.2126f * c[0] + 0.7152f * c[1] + 0.0722f * c[2],
-        c[0] - c[1],
-        0.5f * (c[0] + c[1]) - c[2],
+    private fun opponent(c: DoubleArray) = floatArrayOf(
+        (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]).toFloat(),
+        (c[0] - c[1]).toFloat(),
+        (0.5 * (c[0] + c[1]) - c[2]).toFloat(),
     )
 
     private fun gaussian(sigma: Double, radius: Int): FloatArray {
@@ -96,15 +90,6 @@ internal object Smart {
         return out
     }
 
-    private class Curve(exponent: Double) {
-        private val table = FloatArray(LUT + 1) { (it.toDouble() / LUT).pow(exponent).toFloat() }
-        operator fun invoke(v: Float): Float {
-            val f = v.coerceIn(0f, 1f) * LUT
-            val i = min(f.toInt(), LUT - 1)
-            return table[i] + (table[i + 1] - table[i]) * (f - i)
-        }
-    }
-
     /**
      * @param rgb interleaved r, g, b in 0..255; left untouched.
      * @param meanLuma average brightness (0..1) of the picture before the user's sliders, or NaN
@@ -129,6 +114,7 @@ internal object Smart {
             if (yellow) add(Ink.YELLOW.code)
             if (red) add(Ink.RED.code)
         }.toIntArray()
+        val gamut = Panel.gamut(yellow, red)
 
         // ---- 1. tone -------------------------------------------------------------------------
         var mean = meanLuma
@@ -137,50 +123,40 @@ internal object Smart {
             for (i in 0 until n) acc += 0.299 * rgb[i * 3] + 0.587 * rgb[i * 3 + 1] + 0.114 * rgb[i * 3 + 2]
             mean = (acc / n / 255.0).toFloat()
         }
-        val lift = if (mean > 0f && mean < EXPOSE_TARGET) max(EXPOSE_MIN, ln(EXPOSE_TARGET) / ln(mean.toDouble())) else 1.0
-        val tone = Curve(lift * MIX_GAMMA)
-        val snap = Curve(SNAP)
+        val lift = BRIGHTEN * if (mean > 0f && mean < EXPOSE_TARGET) max(EXPOSE_MIN, ln(EXPOSE_TARGET) / ln(mean.toDouble())) else 1.0
+        // The lift is a factor that depends on a pixel's brightness alone, so a strong colour
+        // stays strong instead of going pale: by[brightness] is that factor.
+        val by = FloatArray(LUT + 1) { min(max(it.toDouble() / LUT, 1e-4).pow(lift - 1.0), EXPOSE_CAP).toFloat() }
+        // From an sRGB value to the space in which shares of ink add up.
+        val mix = FloatArray(LUT + 1) { (it.toDouble() / LUT).pow(Panel.MIX).toFloat() }
+        fun mixed(v: Float): Float {
+            val f = v.coerceIn(0f, 1f) * LUT
+            val i = min(f.toInt(), LUT - 1)
+            return mix[i] + (mix[i + 1] - mix[i]) * (f - i)
+        }
 
         val soft = arrayOf(
             blur(rgb, width, height, 3, 0, 1.0),
             blur(rgb, width, height, 3, 1, 1.0),
             blur(rgb, width, height, 3, 2, 1.0),
         )
-        // t: the colour to aim for, as shares of ink: r = white + yellow + red, g = white + yellow, b = white.
-        val t = FloatArray(n * 3)
+
+        // ---- 2. colour: the share of every ink, per pixel ------------------------------------
+        val share = FloatArray(n * 4)
         // Bit k set: ink k belongs to this pixel's colour. Keeps yellow out of greys and so on.
         val wanted = ByteArray(n)
         val w4 = FloatArray(4)
         for (i in 0 until n) {
-            var r = tone((rgb[i * 3] + SHARPEN * (rgb[i * 3] - soft[0][i])) / 255f)
-            var g = tone((rgb[i * 3 + 1] + SHARPEN * (rgb[i * 3 + 1] - soft[1][i])) / 255f)
-            var b = tone((rgb[i * 3 + 2] + SHARPEN * (rgb[i * 3 + 2] - soft[2][i])) / 255f)
+            var r = ((rgb[i * 3] + SHARPEN * (rgb[i * 3] - soft[0][i])) / 255f).coerceIn(0f, 1f)
+            var g = ((rgb[i * 3 + 1] + SHARPEN * (rgb[i * 3 + 1] - soft[1][i])) / 255f).coerceIn(0f, 1f)
+            var b = ((rgb[i * 3 + 2] + SHARPEN * (rgb[i * 3 + 2] - soft[2][i])) / 255f).coerceIn(0f, 1f)
+            val f = (0.299f * r + 0.587f * g + 0.114f * b) * LUT
+            val at = min(f.toInt(), LUT - 1)
+            val factor = by[at] + (by[at + 1] - by[at]) * (f - at)
+            r *= factor; g *= factor; b *= factor
 
-            // Nearest colour the inks can mix, keeping brightness: they reach exactly r >= g >= b.
-            val all = WR * r + WG * g + WB * b
-            if (yellow && red) {
-                if (g > r) {
-                    val rg = (WR * r + WG * g) / (WR + WG)
-                    if (b > rg) { r = all; g = all; b = all } else { r = rg; g = rg }
-                } else if (b > g) {
-                    val gb = (WG * g + WB * b) / (WG + WB)
-                    if (gb > r) { r = all; g = all; b = all } else { g = gb; b = gb }
-                }
-            } else if (red) {
-                val m = (WG * g + WB * b) / (WG + WB)
-                if (m > r) { r = all; g = all; b = all } else { g = m; b = m }
-            } else if (yellow) {
-                val m = (WR * r + WG * g) / (WR + WG)
-                if (b > m) { r = all; g = all; b = all } else { r = m; g = m }
-            } else {
-                r = all; g = all; b = all
-            }
+            gamut.shares(mixed(r), mixed(g), mixed(b), w4)
 
-            // ---- 2. clean-up -----------------------------------------------------------------
-            w4[0] = snap(1f - r)   // black
-            w4[1] = snap(b)        // white
-            w4[2] = snap(g - b)    // yellow
-            w4[3] = snap(r - g)    // red
             val sum = max(w4[0] + w4[1] + w4[2] + w4[3], 1e-6f)
             var top = 0
             var lost = 0f
@@ -194,33 +170,31 @@ internal object Smart {
             }
             w4[top] += lost
             var bits = 0
-            for (k in 0..3) if (w4[k] > PRESENT) bits = bits or (1 shl k)
+            for (k in 0..3) {
+                share[i * 4 + k] = w4[k]
+                if (w4[k] > PRESENT) bits = bits or (1 shl k)
+            }
             wanted[i] = bits.toByte()
-            t[i * 3 + 2] = w4[1]
-            t[i * 3 + 1] = w4[1] + w4[2]
-            t[i * 3] = w4[1] + w4[2] + w4[3]
         }
         if (!keepGoing()) throw CancellationException()
 
         // ---- 3. placement: start from Floyd-Steinberg ... ----------------------------------------
         val out = ByteArray(n)
-        diffuse(t, width, height, allowed, wanted, out)
+        diffuse(share, width, height, allowed, wanted, out)
         if (!refine) return out
 
-        // ... then search. Everything is measured as brightness and two colour differences.
-        val ink = Array(4) { opponent(SEEN[it]) }
+        // ... then search. Everything is measured as brightness and two colour differences of
+        // the light the pigments really reflect.
+        val ink = Array(4) { opponent(Panel.seen[it]) }
         val aim = FloatArray(n * 3)
-        for (i in 0 until n) {
-            val r = t[i * 3]
-            val g = t[i * 3 + 1]
-            val b = t[i * 3 + 2]
-            for (c in 0..2) aim[i * 3 + c] = b * ink[1][c] + (g - b) * ink[2][c] + (r - g) * ink[3][c]
+        for (i in 0 until n) for (c in 0..2) {
+            aim[i * 3 + c] = share[i * 4 + 1] * ink[1][c] + share[i * 4 + 2] * ink[2][c] + share[i * 4 + 3] * ink[3][c]
         }
         // The eye is far pickier in the dark: weigh errors by how dark the surroundings are.
         val gain = blur(aim, width, height, 3, 0, SIGMA_LIGHT)
         var lowest = Float.MAX_VALUE
         for (i in 0 until n) {
-            gain[i] = (1.0 / (max(gain[i], 0f) + GAIN_FLOOR).toDouble().pow(GAIN_POWER)).toFloat()
+            gain[i] = (1.0 / (max(gain[i], 0f) + GAIN_FLOOR).pow(GAIN_POWER)).toFloat()
             lowest = min(lowest, gain[i])
         }
         for (i in 0 until n) gain[i] /= lowest
@@ -229,8 +203,13 @@ internal object Smart {
         return out
     }
 
-    private fun diffuse(t: FloatArray, width: Int, height: Int, allowed: IntArray, wanted: ByteArray, out: ByteArray) {
-        val buf = t.copyOf()
+    /** Serpentine Floyd-Steinberg in the space where shares of ink add up. */
+    private fun diffuse(share: FloatArray, width: Int, height: Int, allowed: IntArray, wanted: ByteArray, out: ByteArray) {
+        val corner = Array(4) { k -> FloatArray(3) { Panel.mixed[k][it].toFloat() } }
+        val buf = FloatArray(width * height * 3)
+        for (i in 0 until width * height) for (c in 0..2) {
+            buf[i * 3 + c] = share[i * 4 + 1] * corner[1][c] + share[i * 4 + 2] * corner[2][c] + share[i * 4 + 3] * corner[3][c]
+        }
         for (y in 0 until height) {
             val forward = y and 1 == 0
             var x = if (forward) 0 else width - 1
@@ -245,18 +224,18 @@ internal object Smart {
                 val bits = wanted[y * width + x].toInt()
                 for (code in allowed) {
                     if (bits and (1 shl code) == 0) continue
-                    val c = Ink.of(code)
-                    val dr = r - c.r / 255f
-                    val dg = g - c.g / 255f
-                    val db = b - c.b / 255f
+                    val c = corner[code]
+                    val dr = r - c[0]
+                    val dg = g - c[1]
+                    val db = b - c[2]
                     val d = 2f * dr * dr + 4f * dg * dg + db * db
                     if (d < bestD) { bestD = d; best = code }
                 }
                 out[y * width + x] = best.toByte()
-                val c = Ink.of(best)
-                val er = (r - c.r / 255f) / 16f
-                val eg = (g - c.g / 255f) / 16f
-                val eb = (b - c.b / 255f) / 16f
+                val c = corner[best]
+                val er = (r - c[0]) / 16f
+                val eg = (g - c[1]) / 16f
+                val eb = (b - c[2]) / 16f
                 spread(buf, width, height, x + step, y, er * 7f, eg * 7f, eb * 7f)
                 spread(buf, width, height, x - step, y + 1, er * 3f, eg * 3f, eb * 3f)
                 spread(buf, width, height, x, y + 1, er * 5f, eg * 5f, eb * 5f)

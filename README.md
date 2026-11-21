@@ -41,7 +41,7 @@ The cases in question have a battery-free e-ink panel on the back that shows bla
 
 - **A preview that tells the truth.** The photo is reduced to the panel's four inks as you edit, pixel for pixel what the case will draw.
 - **Frame it by hand.** Drag and pinch to place the photo, rotate it, fit or fill, white or black backdrop.
-- **Smart texture.** Instead of pushing rounding errors along, Smart places every pixel by comparing the result, as the eye blurs it, with the original: lines and edges are drawn with the pixels that sit on them, flat areas settle into an even weave, colours the inks cannot make turn into the right shade of grey instead of smearing, and dark pictures are lifted.
+- **Smart texture.** Works the picture out against the panel's measured pigments and places every pixel deliberately, instead of pushing rounding errors along. Truer colour, sharper lines and calmer flat areas than ordinary dithering. [How it works and how it was tested](#the-study-behind-smart).
 - **Four classic textures** as well: Smooth (Floyd–Steinberg), Crisp (Atkinson), Pattern (halftone grid) and Flat for logos and text.
 - **Choose your inks.** Switch yellow or red off for a two- or three-colour look.
 - **Brightness, contrast and colour** sliders, tuned for how little the panel has to work with.
@@ -52,6 +52,72 @@ The cases in question have a battery-free e-ink panel on the back that shows bla
 - **Keeps Android quiet.** Android sees the case as an empty NFC tag and keeps opening its own "New tag scanned" screen for it. Inkwell takes the tag instead and shows nothing.
 - **Updates itself** from this repository's releases. That is the only thing it goes online for.
 - Light, dark and true-black OLED themes.
+
+## The study behind Smart
+
+Every app for these cases has the same job: turn a full-colour picture into 99,840 pixels that can each only be black, white, yellow or red. The usual answer is error diffusion (Floyd-Steinberg, Atkinson), which treats the panel as four ideal colours and pushes each pixel's rounding error onto its neighbours. Smart starts from the panel instead.
+
+### What the panel really is
+
+The cases use a 3.7 inch, 416 x 240 panel at 130 dpi. Its datasheet gives the colour of each pigment, and they are a long way from ideal:
+
+| Pigment | CIELAB from the datasheet | Light reflected, with the panel's white as 1 |
+|---|---|---|
+| White | L* 63 | 1.00 |
+| Yellow | L* 54 or more, b* 66, leaning towards orange | 0.70 |
+| Red | L* 24 or more, a* 40 | 0.13 |
+| Black | L* 9 | 0 (about 1/32 of white in absolute terms) |
+
+Three things follow, and each one is something ordinary dithering gets wrong:
+
+1. **Red is very dark.** It reflects about an eighth of what the white does, where an ideal red would reflect a fifth. A dither that assumes ideal red uses too much of it and the picture comes out dark and heavy.
+2. **Dots darken each other.** A half-and-half pattern of black and white looks darker than half the light. Inkwell models this (Yule-Nielsen, exponent about 1.5), so a tone is given the dot density that looks right, not the one that adds up on paper.
+3. **Every pixel is visible.** At 130 dpi a single stray dot reads as dirt and a noisy texture reads as noise. Where the dots go matters as much as how many there are.
+
+### What Smart does with that
+
+1. **Keeps thin lines.** The photo is scaled down so that samples which stand out from their surroundings count for more. A line thinner than one panel pixel stays a line instead of fading into a faint smear.
+2. **Finds the best mix for every pixel.** For each colour it looks up the mix of the four real pigments that comes closest, in the space where dot patterns actually add up. Colours the pigments cannot make (blue, green, purple) land on the nearest one they can instead of smearing into their neighbours.
+3. **Prefers quiet mixes.** Black dots next to white ones are loud, yellow next to white is nearly silent. Smart gives up a little accuracy where that buys a calmer pattern, and drops ink that would only show up as a few stray dots. It never adds an ink a colour does not call for, so greys stay grey.
+4. **Places the pixels by search.** Starting from an ordinary diffusion, it changes and swaps pixels for as long as that brings the picture, as the eye blurs it, closer to the target (direct binary search). Brightness is judged through a narrow blur and colour through a wide one, so edges are drawn with the pixels that sit on them while flat areas settle into an even weave.
+
+### What it looks like
+
+"The panel's limit" is the picture with every colour replaced by the nearest one the four pigments can mix, with no dots at all. Nothing shown on this panel can look better than that, so it is the target.
+
+![An illustration as the original, the panel's limit, Smooth and Smart](docs/smart/portrait.png)
+
+Colour ramps show the tone and colour handling directly. From left to right: grey, red, yellow, orange, pink, skin, blue and green, each running from black through the full colour to white.
+
+![Colour ramps as the panel's limit, Smooth, Crisp and Smart](docs/smart/ramps.png)
+
+Lines from half a panel pixel wide, outlines, solid patches and small text:
+
+![Line art and text as the original, Smooth, Crisp and Smart](docs/smart/lines.png)
+
+### The numbers
+
+Nine test pictures (four illustrations, three photographs, the ramps and the line art) were run through the app's own code, turned into what the eye would see on the panel, and compared with the originals.
+
+| | Colour error | Lightness error | Structure | Edges | Grain in flat areas |
+|---|---|---|---|---|---|
+| | lower is better | 0 is exact | higher is better | higher is better | lower is better |
+| The panel's limit | 1.70 | -0.5 | 0.970 | 0.954 | 0.16 |
+| **Smart** | **5.12** | **+1.3** | **0.844** | **0.876** | **0.68** |
+| Smooth (Floyd-Steinberg) | 5.87 | +2.7 | 0.810 | 0.842 | 0.81 |
+| Crisp (Atkinson) | 7.76 | +1.8 | 0.762 | 0.828 | 0.89 |
+| Pattern (ordered) | 9.69 | +0.6 | 0.741 | 0.829 | 0.76 |
+| Flat (nearest colour) | 14.78 | -1.4 | 0.634 | 0.736 | 0.83 |
+
+Colour error is the mean Oklab distance (x100), structure is SSIM on lightness, edges is the correlation of edge maps, and grain is the lightness noise left inside areas the original has flat. Smart is the best of the five on colour, structure, edges and grain. It deliberately comes out slightly lighter than the original and lifts dark pictures, because a reflective panel in room light swallows them otherwise. The gap that remains to the panel's limit is mostly the dots themselves: at 130 dpi they cannot be made invisible.
+
+Smart takes about a tenth of a second per picture on a desktop and longer on a phone, against a few milliseconds for the classic textures. While you drag or pinch, the preview shows a quick version and the finished one lands when you let go.
+
+### How far to trust this
+
+The panel model comes from the datasheet and from how pictures looked on a real case, not from measuring a case with an instrument. Panels vary, and the amount by which dots darken each other is an estimate. The scores are from a simulation of the panel built on the same model. If a picture needs a nudge on your case, the brightness, contrast and colour sliders work on top of Smart.
+
+As far as we know, Inkwell is the only app for these cases that models the panel or optimises where the pixels go. The scripts used for the study are in [`tools/smart`](tools/smart).
 
 ## Compatibility
 

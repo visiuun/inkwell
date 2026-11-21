@@ -2,6 +2,8 @@ package com.visiuun.inkwell
 
 import com.visiuun.inkwell.image.Dither
 import com.visiuun.inkwell.image.Ink
+import com.visiuun.inkwell.image.Look
+import com.visiuun.inkwell.image.Raster
 import com.visiuun.inkwell.image.Quantizer
 import java.io.File
 import java.nio.ByteBuffer
@@ -34,7 +36,7 @@ class SmartTest {
         var last = -1f
         for (level in listOf(40, 90, 140, 190, 235)) {
             // meanLuma pinned so the lift for dark pictures does not move the goalposts
-            val px = Quantizer.quantize(picture { _, _ -> Triple(level, level, level) }, w, h, all, Dither.SMART, meanLuma = 0.5f).pixels
+            val px = Quantizer.quantize(picture { _, _ -> Triple(level, level, level) }, w, h, all, Dither.SMART, meanLuma = 0.8f).pixels
             assertTrue(px.all { it == Ink.BLACK.code.toByte() || it == Ink.WHITE.code.toByte() })
             val white = share(px, Ink.WHITE)
             assertTrue("grey $level gave $white white after $last", white > last)
@@ -44,9 +46,20 @@ class SmartTest {
 
     @Test
     fun coloursTheInksCannotMakeTurnGreyInsteadOfSmearing() {
-        val blue = Quantizer.quantize(picture { _, _ -> Triple(40, 90, 230) }, w, h, all, Dither.SMART, meanLuma = 0.5f).pixels
+        val blue = Quantizer.quantize(picture { _, _ -> Triple(40, 90, 230) }, w, h, all, Dither.SMART, meanLuma = 0.8f).pixels
         assertTrue(blue.all { it == Ink.BLACK.code.toByte() || it == Ink.WHITE.code.toByte() })
         assertTrue(share(blue, Ink.WHITE) in 0.05f..0.6f)
+    }
+
+    @Test
+    fun aDarkPictureIsLiftedButItsBlackWhiteAndStrongColoursStay() {
+        fun shares(level: Int, mean: Float) =
+            share(Quantizer.quantize(picture { _, _ -> Triple(level, level, level) }, w, h, all, Dither.SMART, meanLuma = mean).pixels, Ink.WHITE)
+        assertTrue("a dark picture's greys should come out lighter", shares(90, 0.25f) > shares(90, 0.8f) + 0.04f)
+        assertEquals(0f, shares(0, 0.25f), 0f)
+        assertEquals(1f, shares(255, 0.25f), 0f)
+        val red = Quantizer.quantize(picture { _, _ -> Triple(230, 20, 20) }, w, h, all, Dither.SMART, meanLuma = 0.25f).pixels
+        assertTrue("lifting must not wash red out, white share was ${share(red, Ink.WHITE)}", share(red, Ink.WHITE) < 0.05f && share(red, Ink.RED) > 0.9f)
     }
 
     @Test
@@ -87,38 +100,45 @@ class SmartTest {
     }
 
     /**
-     * Not a test of correctness: runs every texture over the pictures in INKWELL_BENCH_DIR
-     * (raw float32 r, g, b files) so they can be scored, and times them.
+     * Not a test of correctness: runs the app's own pipeline (downscale, sliders at their
+     * defaults, every texture) over the pictures in INKWELL_BENCH_DIR so they can be scored, and
+     * times it. Each picture is a raw little-endian ARGB file of the photo drawn at k times the
+     * panel's size, with a .size file holding "width height k".
      */
     @Test
     fun benchmark() {
         val dir = System.getenv("INKWELL_BENCH_DIR")?.let(::File)
         assumeTrue(dir != null && dir.isDirectory)
         val log = StringBuilder()
-        for (file in dir!!.listFiles { f -> f.extension == "f32" }!!.sortedBy { it.name }) {
-            val (bw, bh) = File(dir, file.nameWithoutExtension + ".size").readText().trim().split(" ").map { it.toInt() }
-            val mean = File(dir, file.nameWithoutExtension + ".mean").readText().trim().toFloat()
-            val floats = FloatArray(bw * bh * 3)
-            ByteBuffer.wrap(file.readBytes()).order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer().get(floats)
+        for (file in dir!!.listFiles { f -> f.extension == "sup" }!!.sortedBy { it.name }) {
+            val name = file.nameWithoutExtension
+            val (bw, bh, k) = File(dir, "$name.size").readText().trim().split(" ").map { it.toInt() }
+            val raw = IntArray(bw * k * bh * k)
+            ByteBuffer.wrap(file.readBytes()).order(ByteOrder.LITTLE_ENDIAN).asIntBuffer().get(raw)
             for (dither in Dither.entries) {
+                val look = Look(dither = dither)
+                var reduceTime = Long.MAX_VALUE
                 var best = Long.MAX_VALUE
                 var pixels = ByteArray(0)
                 repeat(if (dither == Dither.SMART) 7 else 3) {
-                    val input = floats.copyOf()
                     val t0 = System.nanoTime()
-                    pixels = Quantizer.quantize(input, bw, bh, all, dither, meanLuma = mean).pixels
-                    best = minOf(best, System.nanoTime() - t0)
+                    val reduced = Raster.reduce(raw, bw, bh, k, look)
+                    val t1 = System.nanoTime()
+                    pixels = Quantizer.quantize(reduced.rgb, bw, bh, all, dither, meanLuma = reduced.meanLuma).pixels
+                    reduceTime = minOf(reduceTime, t1 - t0)
+                    best = minOf(best, System.nanoTime() - t1)
                 }
-                File(dir, "${file.nameWithoutExtension}.${dither.name.lowercase()}.ink").writeBytes(pixels)
-                log.append("${file.nameWithoutExtension} ${dither.name.lowercase()} ${"%.1f".format(best / 1e6)}\n")
+                File(dir, "$name.${dither.name.lowercase()}.ink").writeBytes(pixels)
+                log.append("$name ${dither.name.lowercase()} ${"%.1f".format(best / 1e6)} downscale ${"%.1f".format(reduceTime / 1e6)}\n")
             }
             var quick = Long.MAX_VALUE
+            val reduced = Raster.reduce(raw, bw, bh, k, Look(dither = Dither.SMART))
             repeat(5) {
                 val t0 = System.nanoTime()
-                Quantizer.quantize(floats.copyOf(), bw, bh, all, Dither.SMART, meanLuma = mean, refine = false)
+                Quantizer.quantize(reduced.rgb, bw, bh, all, Dither.SMART, meanLuma = reduced.meanLuma, refine = false)
                 quick = minOf(quick, System.nanoTime() - t0)
             }
-            log.append("${file.nameWithoutExtension} smart-quick ${"%.1f".format(quick / 1e6)}\n")
+            log.append("$name smart-quick ${"%.1f".format(quick / 1e6)}\n")
         }
         File(dir, "timing.txt").writeText(log.toString())
     }
