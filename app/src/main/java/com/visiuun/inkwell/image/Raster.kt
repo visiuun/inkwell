@@ -23,16 +23,17 @@ internal object Raster {
      * @param raw ARGB pixels of the photo drawn at [k] times the panel's size.
      *
      * For most textures a panel pixel is the plain average of its k x k samples. For
-     * [Dither.SMART] samples that stand out from their surroundings count for more, so a line
+     * [Dither.SMART2] samples that stand out from their surroundings count for more, so a line
      * thinner than a pixel stays a line instead of fading into a faint smear (after Weber et al.,
      * "Rapid, detail-preserving image downscaling", 2016).
      *
      * The contrast and colour sliders start out above zero because the classic textures wash a
-     * picture out. Smart does not, so for it those starting values count as "leave it alone".
+     * picture out, and Smart 1 was tuned with it. Smart 2 works from the true picture, so for it
+     * those starting values count as "leave it alone".
      */
     fun reduce(raw: IntArray, width: Int, height: Int, k: Int, look: Look): Reduced {
         val n = width * height
-        val smart = look.dither == Dither.SMART
+        val smart = look.dither == Dither.SMART2
         val samples = (k * k).toFloat()
         val mean = FloatArray(n * 3)
         var lumaSum = 0.0

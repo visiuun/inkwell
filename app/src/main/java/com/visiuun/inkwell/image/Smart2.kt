@@ -10,7 +10,7 @@ import kotlin.math.pow
 import kotlin.math.sqrt
 
 /**
- * The Smart texture. Where the other textures push rounding errors along and hope, this one
+ * Smart 2: the faithful one. Where the other textures push rounding errors along and hope, this one
  * works out the picture against the panel itself (see [Panel]) and decides where every pixel goes:
  *
  *  1. Tone. The picture is sharpened a touch, brightened a touch (dot patterns read darker than
@@ -30,7 +30,7 @@ import kotlin.math.sqrt
  * scores: colour error, lightness error, structural similarity, agreement of edges, and grain in
  * areas the original has flat.
  */
-internal object Smart {
+internal object Smart2 {
     /** Brightness exponent applied to every picture; below 1 brightens. */
     private const val BRIGHTEN = 0.87
 

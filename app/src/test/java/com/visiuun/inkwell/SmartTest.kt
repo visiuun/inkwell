@@ -31,12 +31,24 @@ class SmartTest {
 
     private fun share(pixels: ByteArray, ink: Ink) = pixels.count { it == ink.code.toByte() }.toFloat() / pixels.size
 
-    @Test
-    fun greysUseOnlyBlackAndWhiteAndGetLighterWithTheSource() {
+    @Test fun smart1_greysUseOnlyBlackAndWhiteAndGetLighterWithTheSource() = greysUseOnlyBlackAndWhiteAndGetLighterWithTheSource(Dither.SMART1)
+    @Test fun smart2_greysUseOnlyBlackAndWhiteAndGetLighterWithTheSource() = greysUseOnlyBlackAndWhiteAndGetLighterWithTheSource(Dither.SMART2)
+    @Test fun smart1_coloursTheInksCannotMakeTurnGreyInsteadOfSmearing() = coloursTheInksCannotMakeTurnGreyInsteadOfSmearing(Dither.SMART1)
+    @Test fun smart2_coloursTheInksCannotMakeTurnGreyInsteadOfSmearing() = coloursTheInksCannotMakeTurnGreyInsteadOfSmearing(Dither.SMART2)
+    @Test fun smart1_onlyTheChosenInksAppear() = onlyTheChosenInksAppear(Dither.SMART1)
+    @Test fun smart2_onlyTheChosenInksAppear() = onlyTheChosenInksAppear(Dither.SMART2)
+    @Test fun smart1_aHardEdgeStaysExactlyWhereItIs() = aHardEdgeStaysExactlyWhereItIs(Dither.SMART1)
+    @Test fun smart2_aHardEdgeStaysExactlyWhereItIs() = aHardEdgeStaysExactlyWhereItIs(Dither.SMART2)
+    @Test fun smart1_theSamePictureAlwaysGivesTheSamePixelsAndLeavesItsInputAlone() = theSamePictureAlwaysGivesTheSamePixelsAndLeavesItsInputAlone(Dither.SMART1)
+    @Test fun smart2_theSamePictureAlwaysGivesTheSamePixelsAndLeavesItsInputAlone() = theSamePictureAlwaysGivesTheSamePixelsAndLeavesItsInputAlone(Dither.SMART2)
+    @Test fun smart1_itCanBeAbandonedHalfway() = itCanBeAbandonedHalfway(Dither.SMART1)
+    @Test fun smart2_itCanBeAbandonedHalfway() = itCanBeAbandonedHalfway(Dither.SMART2)
+
+    private fun greysUseOnlyBlackAndWhiteAndGetLighterWithTheSource(smart: Dither) {
         var last = -1f
         for (level in listOf(40, 90, 140, 190, 235)) {
             // meanLuma pinned so the lift for dark pictures does not move the goalposts
-            val px = Quantizer.quantize(picture { _, _ -> Triple(level, level, level) }, w, h, all, Dither.SMART, meanLuma = 0.8f).pixels
+            val px = Quantizer.quantize(picture { _, _ -> Triple(level, level, level) }, w, h, all, smart, meanLuma = 0.8f).pixels
             assertTrue(px.all { it == Ink.BLACK.code.toByte() || it == Ink.WHITE.code.toByte() })
             val white = share(px, Ink.WHITE)
             assertTrue("grey $level gave $white white after $last", white > last)
@@ -44,59 +56,63 @@ class SmartTest {
         }
     }
 
-    @Test
-    fun coloursTheInksCannotMakeTurnGreyInsteadOfSmearing() {
-        val blue = Quantizer.quantize(picture { _, _ -> Triple(40, 90, 230) }, w, h, all, Dither.SMART, meanLuma = 0.8f).pixels
+    private fun coloursTheInksCannotMakeTurnGreyInsteadOfSmearing(smart: Dither) {
+        val blue = Quantizer.quantize(picture { _, _ -> Triple(40, 90, 230) }, w, h, all, smart, meanLuma = 0.8f).pixels
         assertTrue(blue.all { it == Ink.BLACK.code.toByte() || it == Ink.WHITE.code.toByte() })
         assertTrue(share(blue, Ink.WHITE) in 0.05f..0.6f)
     }
 
-    @Test
-    fun aDarkPictureIsLiftedButItsBlackWhiteAndStrongColoursStay() {
-        fun shares(level: Int, mean: Float) =
-            share(Quantizer.quantize(picture { _, _ -> Triple(level, level, level) }, w, h, all, Dither.SMART, meanLuma = mean).pixels, Ink.WHITE)
-        assertTrue("a dark picture's greys should come out lighter", shares(90, 0.25f) > shares(90, 0.8f) + 0.04f)
-        assertEquals(0f, shares(0, 0.25f), 0f)
-        assertEquals(1f, shares(255, 0.25f), 0f)
-        val red = Quantizer.quantize(picture { _, _ -> Triple(230, 20, 20) }, w, h, all, Dither.SMART, meanLuma = 0.25f).pixels
-        assertTrue("lifting must not wash red out, white share was ${share(red, Ink.WHITE)}", share(red, Ink.WHITE) < 0.05f && share(red, Ink.RED) > 0.9f)
-    }
-
-    @Test
-    fun onlyTheChosenInksAppear() {
+    private fun onlyTheChosenInksAppear(smart: Dither) {
         val rainbow = picture { x, y -> Triple(x * 255 / (w - 1), y * 255 / (h - 1), (x + y) * 255 / (w + h - 2)) }
-        val noYellow = Quantizer.quantize(rainbow, w, h, listOf(Ink.BLACK, Ink.WHITE, Ink.RED), Dither.SMART).pixels
+        val noYellow = Quantizer.quantize(rainbow, w, h, listOf(Ink.BLACK, Ink.WHITE, Ink.RED), smart).pixels
         assertTrue(noYellow.none { it == Ink.YELLOW.code.toByte() })
-        val two = Quantizer.quantize(rainbow, w, h, listOf(Ink.BLACK, Ink.WHITE), Dither.SMART).pixels
+        val two = Quantizer.quantize(rainbow, w, h, listOf(Ink.BLACK, Ink.WHITE), smart).pixels
         assertTrue(two.all { it == Ink.BLACK.code.toByte() || it == Ink.WHITE.code.toByte() })
     }
 
-    @Test
-    fun aHardEdgeStaysExactlyWhereItIs() {
-        val px = Quantizer.quantize(picture { x, _ -> if (x < w / 2) Triple(0, 0, 0) else Triple(255, 255, 255) }, w, h, all, Dither.SMART).pixels
+    private fun aHardEdgeStaysExactlyWhereItIs(smart: Dither) {
+        val px = Quantizer.quantize(picture { x, _ -> if (x < w / 2) Triple(0, 0, 0) else Triple(255, 255, 255) }, w, h, all, smart).pixels
         for (y in 0 until h) for (x in 0 until w) {
             assertEquals(if (x < w / 2) Ink.BLACK.code.toByte() else Ink.WHITE.code.toByte(), px[y * w + x])
         }
     }
 
-    @Test
-    fun theSamePictureAlwaysGivesTheSamePixelsAndLeavesItsInputAlone() {
+    private fun theSamePictureAlwaysGivesTheSamePixelsAndLeavesItsInputAlone(smart: Dither) {
         val source = picture { x, y -> Triple(255 - x * 3, 120 + y * 2, 60 + x) }
         val copy = source.copyOf()
-        val a = Quantizer.quantize(source, w, h, all, Dither.SMART).pixels
-        val b = Quantizer.quantize(source, w, h, all, Dither.SMART).pixels
+        val a = Quantizer.quantize(source, w, h, all, smart).pixels
+        val b = Quantizer.quantize(source, w, h, all, smart).pixels
         assertArrayEquals(a, b)
         assertArrayEquals(copy, source, 0f)
     }
 
-    @Test
-    fun itCanBeAbandonedHalfway() {
+    private fun itCanBeAbandonedHalfway(smart: Dither) {
         var polls = 0
         try {
-            Quantizer.quantize(picture { x, y -> Triple(x * 5, y * 6, 128) }, w, h, all, Dither.SMART, keepGoing = { ++polls < 4 })
+            Quantizer.quantize(picture { x, y -> Triple(x * 5, y * 6, 128) }, w, h, all, smart, keepGoing = { ++polls < 4 })
             fail("should have been cancelled")
         } catch (_: CancellationException) {
         }
+    }
+
+    @Test
+    fun aDarkPictureIsLiftedButItsBlackWhiteAndStrongColoursStay() {
+        fun shares(level: Int, mean: Float) =
+            share(Quantizer.quantize(picture { _, _ -> Triple(level, level, level) }, w, h, all, Dither.SMART2, meanLuma = mean).pixels, Ink.WHITE)
+        assertTrue("a dark picture's greys should come out lighter", shares(90, 0.25f) > shares(90, 0.8f) + 0.04f)
+        assertEquals(0f, shares(0, 0.25f), 0f)
+        assertEquals(1f, shares(255, 0.25f), 0f)
+        val red = Quantizer.quantize(picture { _, _ -> Triple(230, 20, 20) }, w, h, all, Dither.SMART2, meanLuma = 0.25f).pixels
+        assertTrue("lifting must not wash red out, white share was ${share(red, Ink.WHITE)}", share(red, Ink.WHITE) < 0.05f && share(red, Ink.RED) > 0.9f)
+    }
+
+    @Test
+    fun theTwoSmartsReallyDiffer() {
+        val source = picture { x, y -> Triple(200 - x * 2, 150 - y, 110) }
+        val one = Quantizer.quantize(source, w, h, all, Dither.SMART1, meanLuma = 0.5f).pixels
+        val two = Quantizer.quantize(source, w, h, all, Dither.SMART2, meanLuma = 0.5f).pixels
+        // Smart 1 is the darker, heavier of the two.
+        assertTrue(share(one, Ink.BLACK) + share(one, Ink.RED) > share(two, Ink.BLACK) + share(two, Ink.RED))
     }
 
     /**
@@ -120,7 +136,7 @@ class SmartTest {
                 var reduceTime = Long.MAX_VALUE
                 var best = Long.MAX_VALUE
                 var pixels = ByteArray(0)
-                repeat(if (dither == Dither.SMART) 7 else 3) {
+                repeat(if (dither.smart) 7 else 3) {
                     val t0 = System.nanoTime()
                     val reduced = Raster.reduce(raw, bw, bh, k, look)
                     val t1 = System.nanoTime()
@@ -132,10 +148,10 @@ class SmartTest {
                 log.append("$name ${dither.name.lowercase()} ${"%.1f".format(best / 1e6)} downscale ${"%.1f".format(reduceTime / 1e6)}\n")
             }
             var quick = Long.MAX_VALUE
-            val reduced = Raster.reduce(raw, bw, bh, k, Look(dither = Dither.SMART))
+            val reduced = Raster.reduce(raw, bw, bh, k, Look(dither = Dither.SMART2))
             repeat(5) {
                 val t0 = System.nanoTime()
-                Quantizer.quantize(reduced.rgb, bw, bh, all, Dither.SMART, meanLuma = reduced.meanLuma, refine = false)
+                Quantizer.quantize(reduced.rgb, bw, bh, all, Dither.SMART2, meanLuma = reduced.meanLuma, refine = false)
                 quick = minOf(quick, System.nanoTime() - t0)
             }
             log.append("$name smart-quick ${"%.1f".format(quick / 1e6)}\n")

@@ -111,9 +111,10 @@ fun CreateScreen(editor: Editor, vm: InkwellViewModel, pick: () -> Unit, openPag
                     Dither.CRISP -> "Lighter and punchier, keeps edges sharp."
                     Dither.PATTERN -> "A regular halftone grid with a print feel."
                     Dither.FLAT -> "Solid areas only. Made for logos, text and line art."
-                    Dither.SMART -> "Works the picture out against the panel's real pigments and places every pixel " +
-                        "to follow its shapes: the truest colour the case can show, sharp lines, even flat areas. " +
-                        "Settles a moment after you let go."
+                    Dither.SMART1 -> "Places every pixel to follow the picture's shapes, with a bold look: deep blacks, " +
+                        "strong colour, clean flat areas. Settles a moment after you let go."
+                    Dither.SMART2 -> "The same careful placement, worked out against the panel's real pigments: lighter, " +
+                        "and as close to the picture's own colours as the case can get. Settles a moment after you let go."
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -304,19 +305,25 @@ private fun androidx.compose.foundation.layout.RowScope.InkToggle(
 private fun DitherPicker(selected: Dither, onSelect: (Dither) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         DitherRow(selected, onSelect)
-        // The one that works the picture out for itself gets a button of its own.
-        ToggleButton(
-            checked = selected == Dither.SMART,
-            onCheckedChange = { onSelect(Dither.SMART) },
-            modifier = Modifier.fillMaxWidth().height(64.dp).semantics { role = Role.RadioButton },
-            colors = ToggleButtonDefaults.colors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            ),
-        ) {
-            Icon(if (selected == Dither.SMART) Sym.SparkleFill else Sym.Sparkle, null, Modifier.size(24.dp))
-            Spacer(Modifier.width(12.dp))
-            Text(Dither.SMART.label, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+        // The two that work the picture out for themselves get big buttons of their own.
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)) {
+            for (option in listOf(Dither.SMART1, Dither.SMART2)) {
+                ToggleButton(
+                    checked = selected == option,
+                    onCheckedChange = { onSelect(option) },
+                    modifier = Modifier.weight(1f).height(64.dp).semantics { role = Role.RadioButton },
+                    contentPadding = PaddingValues(horizontal = 8.dp),
+                    shapes = if (option == Dither.SMART1) ButtonGroupDefaults.connectedLeadingButtonShapes() else ButtonGroupDefaults.connectedTrailingButtonShapes(),
+                    colors = ToggleButtonDefaults.colors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
+                ) {
+                    Icon(if (selected == option) Sym.SparkleFill else Sym.Sparkle, null, Modifier.size(22.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text(option.label, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                }
+            }
         }
     }
 }

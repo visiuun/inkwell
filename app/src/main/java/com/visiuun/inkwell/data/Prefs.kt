@@ -122,7 +122,8 @@ class Prefs(context: Context) {
         brightness = sp.getFloat("look_brightness", 0f),
         contrast = sp.getFloat("look_contrast", 0.15f),
         saturation = sp.getFloat("look_saturation", 0.3f),
-        dither = sp.getString("look_dither", null)?.let { v -> Dither.entries.firstOrNull { it.name == v } } ?: Dither.SMOOTH,
+        // "SMART" is what versions before the split saved.
+        dither = sp.getString("look_dither", null)?.let { v -> if (v == "SMART") Dither.SMART1 else Dither.entries.firstOrNull { it.name == v } } ?: Dither.SMOOTH,
         red = sp.getBoolean("look_red", true),
         yellow = sp.getBoolean("look_yellow", true),
         darkBackdrop = sp.getBoolean("look_dark", false),

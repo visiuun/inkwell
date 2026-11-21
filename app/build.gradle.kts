@@ -21,8 +21,8 @@ android {
         applicationId = "com.visiuun.inkwell"
         minSdk = 24
         targetSdk = 36
-        versionCode = 9
-        versionName = "1.3.2"
+        versionCode = 10
+        versionName = "1.4.0"
         buildConfigField("String", "UPDATE_REPO", "\"visiuun/inkwell\"")
     }
 

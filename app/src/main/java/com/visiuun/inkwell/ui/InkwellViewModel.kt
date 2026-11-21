@@ -147,7 +147,7 @@ class InkwellViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 // Smart takes a moment, too long to keep up with a finger. Its quick first version
                 // goes up at once and the finished one follows as soon as the picture holds still.
-                val twoSteps = src != null && input.look.dither == Dither.SMART
+                val twoSteps = src != null && input.look.dither.smart
                 val first = withContext(Dispatchers.Default) {
                     Composer.compose(src, input.width, input.height, input.placement, input.look, refine = !twoSteps)
                 }

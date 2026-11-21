@@ -91,7 +91,7 @@ object Composer {
     /**
      * Renders the photo into the panel's pixels and reduces it to ink.
      *
-     * [refine] and [keepGoing] only matter to [Dither.SMART], which takes a moment: with [refine]
+     * [refine] and [keepGoing] only matter to the Smart textures, which take a moment: with [refine]
      * off it returns its quick first version, and [keepGoing] turning false abandons the work
      * with a CancellationException.
      */

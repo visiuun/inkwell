@@ -26,8 +26,14 @@ enum class Dither(val label: String) {
     PATTERN("Pattern"),
     FLAT("Flat"),
 
-    /** Looks at the whole picture and places every pixel deliberately. See [Smart]. */
-    SMART("Smart"),
+    /** Places every pixel deliberately, with a bold, contrasty look. See [Smart1]. */
+    SMART1("Smart 1"),
+
+    /** Places every pixel deliberately, as true to the picture as the panel's pigments allow. See [Smart2]. */
+    SMART2("Smart 2");
+
+    /** One of the textures that work the whole picture out and take a moment to do it. */
+    val smart: Boolean get() = this == SMART1 || this == SMART2
 }
 
 /** A picture reduced to ink codes, one byte per pixel, row by row from the top left. */

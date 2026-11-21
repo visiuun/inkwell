@@ -25,10 +25,10 @@ object Quantizer {
     /**
      * @param rgb interleaved r, g, b in 0..255, row by row; it is used as scratch space.
      * @param inks the pigments allowed in the result (black and white are always worth including).
-     * @param meanLuma for [Dither.SMART]: the picture's average brightness (0..1) before the
+     * @param meanLuma for the Smart textures: the picture's average brightness (0..1) before the
      *   sliders, or NaN to measure [rgb].
-     * @param refine for [Dither.SMART]: false gives a quick first version.
-     * @param keepGoing for [Dither.SMART]: return false to abandon the work (it then throws a
+     * @param refine for the Smart textures: false gives a quick first version.
+     * @param keepGoing for the Smart textures: return false to abandon the work (it then throws a
      *   CancellationException).
      */
     fun quantize(
@@ -43,9 +43,15 @@ object Quantizer {
     ): InkImage {
         require(rgb.size == width * height * 3 && inks.isNotEmpty())
         // Smart mixes around black and white; without both there is nothing for it to work with.
-        val smart = dither == Dither.SMART && Ink.BLACK in inks && Ink.WHITE in inks
-        if (smart) {
-            return InkImage(width, height, Smart.quantize(rgb, width, height, Ink.YELLOW in inks, Ink.RED in inks, meanLuma, refine, keepGoing))
+        if (dither.smart && Ink.BLACK in inks && Ink.WHITE in inks) {
+            val yellow = Ink.YELLOW in inks
+            val red = Ink.RED in inks
+            val pixels = if (dither == Dither.SMART1) {
+                Smart1.quantize(rgb, width, height, yellow, red, meanLuma, refine, keepGoing)
+            } else {
+                Smart2.quantize(rgb, width, height, yellow, red, meanLuma, refine, keepGoing)
+            }
+            return InkImage(width, height, pixels)
         }
         val out = ByteArray(width * height)
         when (dither) {
@@ -57,7 +63,7 @@ object Quantizer {
                 val bias = t * 150f
                 out[i] = nearest(inks, rgb[i * 3] + bias, rgb[i * 3 + 1] + bias, rgb[i * 3 + 2] + bias).code.toByte()
             }
-            Dither.SMOOTH, Dither.SMART -> diffuse(rgb, width, height, inks, FLOYD, out)
+            Dither.SMOOTH, Dither.SMART1, Dither.SMART2 -> diffuse(rgb, width, height, inks, FLOYD, out)
             Dither.CRISP -> diffuse(rgb, width, height, inks, ATKINSON, out)
         }
         return InkImage(width, height, out)
