@@ -41,7 +41,8 @@ The cases in question have a battery-free e-ink panel on the back that shows bla
 
 - **A preview that tells the truth.** The photo is reduced to the panel's four inks as you edit, pixel for pixel what the case will draw.
 - **Frame it by hand.** Drag and pinch to place the photo, rotate it, fit or fill, white or black backdrop.
-- **Four textures.** Smooth (Floyd–Steinberg) for photos, Crisp (Atkinson), Pattern (halftone grid) and Flat for logos and text.
+- **Smart texture.** Instead of pushing rounding errors along, Smart places every pixel by comparing the result, as the eye blurs it, with the original: lines and edges are drawn with the pixels that sit on them, flat areas settle into an even weave, colours the inks cannot make turn into the right shade of grey instead of smearing, and dark pictures are lifted.
+- **Four classic textures** as well: Smooth (Floyd–Steinberg), Crisp (Atkinson), Pattern (halftone grid) and Flat for logos and text.
 - **Choose your inks.** Switch yellow or red off for a two- or three-colour look.
 - **Brightness, contrast and colour** sliders, tuned for how little the panel has to work with.
 - **Library.** Every design that reaches the case is kept, so going back to a favourite takes two taps.

@@ -25,6 +25,9 @@ enum class Dither(val label: String) {
     CRISP("Crisp"),
     PATTERN("Pattern"),
     FLAT("Flat"),
+
+    /** Looks at the whole picture and places every pixel deliberately. See [Smart]. */
+    SMART("Smart"),
 }
 
 /** A picture reduced to ink codes, one byte per pixel, row by row from the top left. */

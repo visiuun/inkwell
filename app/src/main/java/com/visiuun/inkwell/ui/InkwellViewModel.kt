@@ -17,6 +17,7 @@ import com.visiuun.inkwell.data.Library
 import com.visiuun.inkwell.data.Prefs
 import com.visiuun.inkwell.data.Settings
 import com.visiuun.inkwell.image.Composer
+import com.visiuun.inkwell.image.Dither
 import com.visiuun.inkwell.image.Ink
 import com.visiuun.inkwell.image.InkImage
 import com.visiuun.inkwell.image.Look
@@ -44,6 +45,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.IOException
@@ -139,12 +141,27 @@ class InkwellViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             renderInput.collectLatest { input ->
                 val src = source
-                val image = withContext(Dispatchers.Default) {
-                    Composer.compose(src, input.width, input.height, input.placement, input.look)
+                fun show(image: InkImage) {
+                    val preview = if (src == null) null else Composer.toBitmap(image, paper = true).asImageBitmap()
+                    _editor.update { it.copy(preview = preview, width = input.width, height = input.height) }
                 }
-                rendered = image
-                val preview = if (src == null) null else Composer.toBitmap(image, paper = true).asImageBitmap()
-                _editor.update { it.copy(preview = preview, width = input.width, height = input.height) }
+                // Smart takes a moment, too long to keep up with a finger. Its quick first version
+                // goes up at once and the finished one follows as soon as the picture holds still.
+                val twoSteps = src != null && input.look.dither == Dither.SMART
+                val first = withContext(Dispatchers.Default) {
+                    Composer.compose(src, input.width, input.height, input.placement, input.look, refine = !twoSteps)
+                }
+                // Until the finished version exists, sending renders its own.
+                rendered = if (twoSteps) null else first
+                show(first)
+                if (twoSteps) {
+                    val finished = withContext(Dispatchers.Default) {
+                        val job = coroutineContext
+                        Composer.compose(src, input.width, input.height, input.placement, input.look, keepGoing = { job.isActive })
+                    }
+                    rendered = finished
+                    show(finished)
+                }
             }
         }
         viewModelScope.launch {

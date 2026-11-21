@@ -53,6 +53,8 @@ ICONS = {
     "Download": ("download", "default"),
     "Vibration": ("vibration", "default"),
     "OpenInNew": ("open_in_new", "default"),
+    "Sparkle": ("auto_awesome", "default"),
+    "SparkleFill": ("auto_awesome", "fill1"),
 }
 
 URL = "https://fonts.gstatic.com/s/i/short-term/release/materialsymbolsrounded/{name}/{variant}/24px.svg"

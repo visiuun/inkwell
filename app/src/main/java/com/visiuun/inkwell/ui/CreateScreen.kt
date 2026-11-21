@@ -111,6 +111,8 @@ fun CreateScreen(editor: Editor, vm: InkwellViewModel, pick: () -> Unit, openPag
                     Dither.CRISP -> "Lighter and punchier, keeps edges sharp."
                     Dither.PATTERN -> "A regular halftone grid with a print feel."
                     Dither.FLAT -> "Solid areas only. Made for logos, text and line art."
+                    Dither.SMART -> "Reads the picture and places every pixel to follow its shapes: clean flat areas, " +
+                        "sharp lines, truer colour, and dark pictures lifted. Settles a moment after you let go."
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -299,7 +301,28 @@ private fun androidx.compose.foundation.layout.RowScope.InkToggle(
 
 @Composable
 private fun DitherPicker(selected: Dither, onSelect: (Dither) -> Unit) {
-    val options = Dither.entries
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        DitherRow(selected, onSelect)
+        // The one that works the picture out for itself gets a button of its own.
+        ToggleButton(
+            checked = selected == Dither.SMART,
+            onCheckedChange = { onSelect(Dither.SMART) },
+            modifier = Modifier.fillMaxWidth().height(64.dp).semantics { role = Role.RadioButton },
+            colors = ToggleButtonDefaults.colors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            ),
+        ) {
+            Icon(if (selected == Dither.SMART) Sym.SparkleFill else Sym.Sparkle, null, Modifier.size(24.dp))
+            Spacer(Modifier.width(12.dp))
+            Text(Dither.SMART.label, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+        }
+    }
+}
+
+@Composable
+private fun DitherRow(selected: Dither, onSelect: (Dither) -> Unit) {
+    val options = listOf(Dither.SMOOTH, Dither.CRISP, Dither.PATTERN, Dither.FLAT)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)) {
         options.forEachIndexed { i, option ->
             ToggleButton(

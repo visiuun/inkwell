@@ -84,8 +84,22 @@ object Composer {
         return if (placement.fill) max(width / sw, height / sh) else min(width / sw, height / sh)
     }
 
-    /** Renders the photo into the panel's pixels and reduces it to ink. */
-    fun compose(source: Bitmap?, width: Int, height: Int, placement: Placement, look: Look): InkImage {
+    /**
+     * Renders the photo into the panel's pixels and reduces it to ink.
+     *
+     * [refine] and [keepGoing] only matter to [Dither.SMART], which takes a moment: with [refine]
+     * off it returns its quick first version, and [keepGoing] turning false abandons the work
+     * with a CancellationException.
+     */
+    fun compose(
+        source: Bitmap?,
+        width: Int,
+        height: Int,
+        placement: Placement,
+        look: Look,
+        refine: Boolean = true,
+        keepGoing: () -> Boolean = { true },
+    ): InkImage {
         val backdrop = if (look.darkBackdrop) Ink.BLACK else Ink.WHITE
         if (source == null) return InkImage.solid(width, height, backdrop)
         val k = SUPERSAMPLE
@@ -109,6 +123,7 @@ object Composer {
         val saturation = if (look.saturation >= 0f) 1f + look.saturation * 1.5f else 1f + look.saturation
         val lift = look.brightness * 110f
         val samples = (k * k).toFloat()
+        var lumaSum = 0.0
         for (y in 0 until height) {
             for (x in 0 until width) {
                 var r = 0f
@@ -125,6 +140,7 @@ object Composer {
                 }
                 r /= samples; g /= samples; b /= samples
                 val luma = 0.299f * r + 0.587f * g + 0.114f * b
+                lumaSum += luma
                 r = luma + (r - luma) * saturation
                 g = luma + (g - luma) * saturation
                 b = luma + (b - luma) * saturation
@@ -134,7 +150,8 @@ object Composer {
                 rgb[i + 2] = ((b - 128f) * contrast + 128f + lift).coerceIn(0f, 255f)
             }
         }
-        return Quantizer.quantize(rgb, width, height, look.inks, look.dither)
+        val meanLuma = (lumaSum / (width * height) / 255.0).toFloat()
+        return Quantizer.quantize(rgb, width, height, look.inks, look.dither, meanLuma, refine, keepGoing)
     }
 
     fun toBitmap(image: InkImage, paper: Boolean): Bitmap =

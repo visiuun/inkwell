@@ -25,9 +25,28 @@ object Quantizer {
     /**
      * @param rgb interleaved r, g, b in 0..255, row by row; it is used as scratch space.
      * @param inks the pigments allowed in the result (black and white are always worth including).
+     * @param meanLuma for [Dither.SMART]: the picture's average brightness (0..1) before the
+     *   sliders, or NaN to measure [rgb].
+     * @param refine for [Dither.SMART]: false gives a quick first version.
+     * @param keepGoing for [Dither.SMART]: return false to abandon the work (it then throws a
+     *   CancellationException).
      */
-    fun quantize(rgb: FloatArray, width: Int, height: Int, inks: List<Ink>, dither: Dither): InkImage {
+    fun quantize(
+        rgb: FloatArray,
+        width: Int,
+        height: Int,
+        inks: List<Ink>,
+        dither: Dither,
+        meanLuma: Float = Float.NaN,
+        refine: Boolean = true,
+        keepGoing: () -> Boolean = { true },
+    ): InkImage {
         require(rgb.size == width * height * 3 && inks.isNotEmpty())
+        // Smart mixes around black and white; without both there is nothing for it to work with.
+        val smart = dither == Dither.SMART && Ink.BLACK in inks && Ink.WHITE in inks
+        if (smart) {
+            return InkImage(width, height, Smart.quantize(rgb, width, height, Ink.YELLOW in inks, Ink.RED in inks, meanLuma, refine, keepGoing))
+        }
         val out = ByteArray(width * height)
         when (dither) {
             Dither.FLAT -> for (i in out.indices) out[i] = nearest(inks, rgb[i * 3], rgb[i * 3 + 1], rgb[i * 3 + 2]).code.toByte()
@@ -38,7 +57,7 @@ object Quantizer {
                 val bias = t * 150f
                 out[i] = nearest(inks, rgb[i * 3] + bias, rgb[i * 3 + 1] + bias, rgb[i * 3 + 2] + bias).code.toByte()
             }
-            Dither.SMOOTH -> diffuse(rgb, width, height, inks, FLOYD, out)
+            Dither.SMOOTH, Dither.SMART -> diffuse(rgb, width, height, inks, FLOYD, out)
             Dither.CRISP -> diffuse(rgb, width, height, inks, ATKINSON, out)
         }
         return InkImage(width, height, out)
